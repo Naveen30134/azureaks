@@ -1,0 +1,35 @@
+trigger:
+- main
+
+pool:
+  name: Self-Hosted-Pool
+
+steps:
+
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'Free Trial(eb2d5feb-eda9-434b-aa4a-5dc00952aafa)'
+    scriptType: 'bash'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      docker build -t aksdemoacr87.azurecr.io/web-game:$(Build.BuildId) 2048-game
+      az acr login -n aksdemoacr87
+      docker push aksdemoacr87.azurecr.io/web-game:$(Build.BuildId)
+
+- script: cat 01_kubernetes_aks/app-deploy.yaml
+
+- task: Kubernetes@1
+  inputs:
+    connectionType: 'Azure Resource Manager'
+    azureSubscriptionEndpoint: 'Free Trial(eb2d5feb-eda9-434b-aa4a-5dc00952aafa)'
+    azureResourceGroup: 'askdemo_container-registry'
+    kubernetesCluster: 'aksdemo-cluster'
+    namespace: 'dev'
+    command: 'apply'
+    useConfigurationFile: true
+    configuration: '01_kubernetes_aks'
+    secretType: 'dockerRegistry'
+    containerRegistryType: 'Azure Container Registry'
+    azureSubscriptionEndpointForSecrets: 'Free Trial(eb2d5feb-eda9-434b-aa4a-5dc00952aafa)'
+    azureContainerRegistry: 'aksdemoacr87.azurecr.io'
+    forceUpdate: false

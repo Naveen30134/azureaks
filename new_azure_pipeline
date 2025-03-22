@@ -1,0 +1,49 @@
+trigger:
+  - main
+
+pool:
+  name: Self-Hosted-Pool
+
+variables:
+  azureSubscription: 'aksdemo-service-connection-new'
+  resourceGroup: 'askdemo_container-registry'
+  aksCluster: 'aksdemo-cluster'
+  acrName: 'aksdemoacr87'
+  imageName: 'web-game'
+  namespace: 'dev'
+
+steps:
+  - task: AzureCLI@2
+    inputs:
+      azureSubscription: $(azureSubscription)
+      scriptType: 'bash'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        set -e
+        echo "Building Docker image..."
+        docker build -t $(acrName).azurecr.io/$(imageName):$(Build.BuildId) 2048-game
+        echo "Logging into ACR..."
+        az acr login -n $(acrName)
+        echo "Pushing Docker image..."
+        docker push $(acrName).azurecr.io/$(imageName):$(Build.BuildId)
+        echo "Docker image pushed successfully."
+        echo "Updating image tag with Build ID: $(Build.BuildId)"
+        sed -i "s|image: .*|image: aksdemoacr87.azurecr.io/web-game:$(Build.BuildId)|" 01_kubernetes_aks/app-deploy.yaml
+
+
+  - task: Kubernetes@1
+    displayName: 'Deploy Kubernetes manifests'
+    inputs:
+      connectionType: 'Azure Resource Manager'
+      azureSubscriptionEndpoint: $(azureSubscription)
+      azureResourceGroup: $(resourceGroup)
+      kubernetesCluster: $(aksCluster)
+      namespace: $(namespace)
+      command: 'apply'
+      useConfigurationFile: true
+      configuration: '01_kubernetes_aks/app-deploy.yaml'
+      secretType: 'dockerRegistry'
+      containerRegistryType: 'Azure Container Registry'
+      azureSubscriptionEndpointForSecrets: $(azureSubscription)
+      azureContainerRegistry: '$(acrName).azurecr.io'
+      forceUpdate: false
